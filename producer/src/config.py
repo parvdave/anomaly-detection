@@ -5,7 +5,7 @@ KAFKA_BOOTSTRAP_SERVERS: str = os.environ.get("KAFKA_BOOTSTRAP_SERVERS", "kafka:
 CRYPTO_TOPIC: str = os.environ.get("CRYPTO_TOPIC", "crypto.prices.raw")
 
 # Binance WebSocket
-BINANCE_WS_BASE_URL: str = os.environ.get("BINANCE_WS_URL", "wss://stream.binance.com:9443/stream")
+BINANCE_WS_BASE_URL: str = os.environ.get("BINANCE_WS_URL", "wss://stream.binance.us:9443/stream")
 SYMBOLS: list[str] = os.environ.get("SYMBOLS", "btcusdt,ethusdt,bnbusdt,solusdt,adausdt").split(",")
 BINANCE_STREAM_TYPE: str = os.environ.get("BINANCE_STREAM_TYPE", "trade")
 
