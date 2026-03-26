@@ -2,12 +2,12 @@ FROM python:3.11-slim
 
 # Install Java (required by Spark) and curl for JAR downloads
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-17-jre-headless \
+    openjdk-21-jre \
     curl \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 ENV PYSPARK_PYTHON=python3
 ENV PYSPARK_DRIVER_PYTHON=python3
