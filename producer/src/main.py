@@ -9,7 +9,8 @@ import asyncio
 import logging
 import signal
 
-from .binance_ws import BinanceWebSocketClient
+from .binance_ws import BinanceUnavailableError, BinanceWebSocketClient
+from .data_generator import MockTradeGenerator
 from .producer import CryptoProducer
 
 logging.basicConfig(
@@ -24,16 +25,29 @@ async def main() -> None:
 
     def on_trade(trade: dict) -> None:
         kafka_producer.publish(trade)
-        logger.info("→ Kafka  %s  price=%.4f  vol=%.6f", trade["symbol"], trade["price"], trade["volume"])
-
-    ws_client = BinanceWebSocketClient(on_message=on_trade)
 
     loop = asyncio.get_running_loop()
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda: asyncio.create_task(ws_client.stop()))
 
     try:
+        # ── Attempt live Binance stream ────────────────────────────────────────
+        logger.info("Attempting Binance WebSocket connection...")
+        ws_client = BinanceWebSocketClient(on_message=on_trade)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, lambda: asyncio.create_task(ws_client.stop()))
         await ws_client.run()
+
+    except BinanceUnavailableError as exc:
+        # ── Fallback: mock generator ───────────────────────────────────────────
+        logger.warning("%s", exc)
+        logger.info("Falling back to mock trade generator.")
+        mock = MockTradeGenerator()
+        stop_event = asyncio.Event()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, stop_event.set)
+        mock_task = asyncio.create_task(mock.run(on_trade))
+        await stop_event.wait()
+        mock_task.cancel()
+
     finally:
         logger.info("Flushing Kafka producer...")
         kafka_producer.flush()

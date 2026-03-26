@@ -7,10 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     procps \
     && rm -rf /var/lib/apt/lists/*
 
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-ENV PATH="${JAVA_HOME}/bin:${PATH}"
 ENV PYSPARK_PYTHON=python3
 ENV PYSPARK_DRIVER_PYTHON=python3
+# JAVA_HOME is discovered at runtime so the path is arch-independent (see CMD)
 
 # Install Python dependencies (pyspark pip package bundles Spark binaries)
 RUN pip install --no-cache-dir \
@@ -36,4 +35,5 @@ COPY src/ /app/src/
 
 WORKDIR /app
 
-CMD ["python", "-m", "src.main"]
+# Discover JAVA_HOME at runtime so path works on any arch (amd64/arm64/etc.)
+CMD ["sh", "-c", "export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java)))) && export PATH=$JAVA_HOME/bin:$PATH && exec python -m src.main"]

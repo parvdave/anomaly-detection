@@ -18,7 +18,12 @@ from datetime import datetime, timezone
 from typing import Callable
 
 import websockets
-from websockets.exceptions import ConnectionClosed
+from websockets.exceptions import ConnectionClosed, InvalidStatusCode
+
+
+class BinanceUnavailableError(Exception):
+    """Raised when Binance rejects the connection with a permanent HTTP error
+    (e.g. 451 geo-block, 403 forbidden) — retrying won't help."""
 
 from . import config
 
@@ -76,8 +81,18 @@ class BinanceWebSocketClient:
             try:
                 await self._connect_and_consume()
                 attempt = 0  # reset on clean exit (proactive reconnect)
+            except BinanceUnavailableError:
+                raise  # propagate immediately — caller switches to mock
             except ConnectionClosed as exc:
                 logger.warning("WebSocket closed: %s", exc)
+                attempt += 1
+            except InvalidStatusCode as exc:
+                if exc.status_code in (451, 403):
+                    raise BinanceUnavailableError(
+                        f"Binance rejected connection: HTTP {exc.status_code} "
+                        "(geo-block or access denied). Switching to mock data."
+                    )
+                logger.warning("WebSocket HTTP error %d: %s", exc.status_code, exc)
                 attempt += 1
             except Exception as exc:
                 logger.error("Unexpected error: %s", exc, exc_info=True)
