@@ -1,8 +1,18 @@
-FROM bitnami/spark:3.5.1
+FROM python:3.11-slim
 
-USER root
+# Install Java (required by Spark) and curl for JAR downloads
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openjdk-17-jre-headless \
+    curl \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+ENV PYSPARK_PYTHON=python3
+ENV PYSPARK_DRIVER_PYTHON=python3
+
+# Install Python dependencies (pyspark pip package bundles Spark binaries)
 RUN pip install --no-cache-dir \
     pyspark==3.5.1 \
     psycopg2-binary==2.9.9 \
@@ -26,4 +36,4 @@ COPY src/ /app/src/
 
 WORKDIR /app
 
-CMD ["python", "src/main.py"]
+CMD ["python", "-m", "src.main"]
