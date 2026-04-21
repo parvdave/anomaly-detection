@@ -1,0 +1,705 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Crypto Anomaly Monitor</title>
+  <style>
+    :root {
+      --bg-page:       #0d0f14;
+      --bg-card:       #161b26;
+      --bg-card-alt:   #1c2333;
+      --bg-input:      #111827;
+      --border:        #2a3147;
+      --text-primary:  #e2e8f0;
+      --text-muted:    #64748b;
+      --text-heading:  #94a3b8;
+      --accent:        #3b82f6;
+      --accent-green:  #10b981;
+      --accent-red:    #ef4444;
+      --accent-amber:  #f59e0b;
+      --accent-purple: #8b5cf6;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-page);
+      color: var(--text-primary);
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .header-left h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+    .header-left .subtitle { color: var(--text-muted); font-size: 12px; }
+
+    #ws-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--bg-card-alt);
+      transition: color 0.3s, border-color 0.3s;
+    }
+    #ws-status::before {
+      content: '';
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    #ws-status.connected    { color: var(--accent-green); border-color: rgba(16,185,129,.3); }
+    #ws-status.disconnected { color: var(--accent-red);   border-color: rgba(239,68,68,.3); }
+    #ws-status.reconnecting { color: var(--accent-amber); border-color: rgba(245,158,11,.3); }
+
+    /* ── Main layout ── */
+    main { padding: 24px; max-width: 1600px; margin: 0 auto; }
+
+    section + section { margin-top: 28px; }
+
+    h2 {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--text-heading);
+      margin-bottom: 14px;
+    }
+
+    /* ── Stats cards ── */
+    #stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 14px;
+    }
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      border-left: 3px solid var(--accent);
+      transition: border-color 0.3s;
+    }
+    .stat-card:nth-child(2) { border-left-color: var(--accent-green); }
+    .stat-card:nth-child(3) { border-left-color: var(--accent-purple); }
+    .stat-card:nth-child(4) { border-left-color: var(--accent-amber); }
+    .stat-label { font-size: 11px; font-weight: 500; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .stat-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: -1px; }
+
+    /* ── Charts ── */
+    #charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+    @media (max-width: 768px) { #charts-row { grid-template-columns: 1fr; } }
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+    }
+    .chart-card canvas { max-height: 260px; }
+
+    /* ── Live feed ── */
+    #live-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+    #live-header h2 { margin-bottom: 0; }
+    .badge {
+      background: var(--bg-card-alt);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 1px 9px;
+      font-size: 11px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted);
+    }
+    #live-feed {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 280px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    #live-feed::-webkit-scrollbar { width: 4px; }
+    #live-feed::-webkit-scrollbar-track { background: transparent; }
+    #live-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .live-item {
+      display: grid;
+      grid-template-columns: 90px 100px 1fr auto auto;
+      gap: 12px;
+      align-items: center;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      animation: slideIn 0.3s ease;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .live-item .li-symbol { font-weight: 600; font-size: 13px; }
+    .live-item .li-time   { color: var(--text-muted); font-size: 12px; }
+    .live-item .li-price  { font-variant-numeric: tabular-nums; }
+    .live-item .li-types  { display: flex; gap: 4px; flex-wrap: wrap; }
+    .live-item .li-score  { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; min-width: 40px; }
+
+    /* ── Tags ── */
+    .tag {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+      background: rgba(59,130,246,.15);
+      color: #93c5fd;
+      border: 1px solid rgba(59,130,246,.25);
+    }
+    .tag.zscore  { background: rgba(139,92,246,.15); color: #c4b5fd; border-color: rgba(139,92,246,.25); }
+    .tag.iqr     { background: rgba(16,185,129,.15); color: #6ee7b7; border-color: rgba(16,185,129,.25); }
+    .tag.volume  { background: rgba(245,158,11,.15); color: #fcd34d; border-color: rgba(245,158,11,.25); }
+
+    /* Score colors */
+    .score-low    { color: var(--accent-green); }
+    .score-medium { color: var(--accent-amber); }
+    .score-high   { color: var(--accent-red); }
+
+    /* ── Filters ── */
+    #filter-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    #filter-bar input {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      padding: 7px 12px;
+      font-size: 13px;
+      outline: none;
+      width: 160px;
+      transition: border-color 0.2s;
+    }
+    #filter-bar input:focus { border-color: var(--accent); }
+    #filter-bar input::placeholder { color: var(--text-muted); }
+    #filter-bar button {
+      background: var(--accent);
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 16px;
+      transition: opacity 0.2s;
+    }
+    #filter-bar button:hover { opacity: 0.85; }
+    #btn-clear { background: var(--bg-card-alt); border: 1px solid var(--border); color: var(--text-primary); }
+
+    /* ── Table ── */
+    #table-wrapper { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead { background: var(--bg-card-alt); }
+    th {
+      padding: 11px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+    tbody tr {
+      border-top: 1px solid var(--border);
+      background: var(--bg-card);
+      transition: background 0.15s;
+    }
+    tbody tr:hover { background: var(--bg-card-alt); }
+    td {
+      padding: 10px 14px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    td.sym { font-weight: 600; }
+    td.price, td.score { font-variant-numeric: tabular-nums; }
+    td.flags { color: var(--text-muted); font-size: 11px; letter-spacing: 0.3px; }
+
+    /* ── Pagination ── */
+    #pagination {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 12px;
+    }
+    #pagination button {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-primary);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 6px 14px;
+      transition: border-color 0.2s;
+    }
+    #pagination button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+    #pagination button:disabled { opacity: 0.4; cursor: default; }
+    #page-info { color: var(--text-muted); font-size: 12px; }
+
+    /* ── Empty state ── */
+    .empty-row td {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 32px;
+    }
+
+    /* ── Loading spinner ── */
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <h1>Crypto Anomaly Monitor</h1>
+    <span class="subtitle">Real-time detection · Binance streams</span>
+  </div>
+  <span id="ws-status">Connecting…</span>
+</header>
+
+<main>
+  <!-- Stats -->
+  <section>
+    <h2>Last 24 Hours</h2>
+    <div id="stats-row">
+      <div class="stat-card">
+        <div class="stat-label">Total Anomalies</div>
+        <div class="stat-value" id="stat-total">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Active Symbols</div>
+        <div class="stat-value" id="stat-symbols">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Top Type</div>
+        <div class="stat-value" id="stat-top-type" style="font-size:16px;letter-spacing:0;margin-top:4px">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Last Alert</div>
+        <div class="stat-value" id="stat-last-seen" style="font-size:16px;letter-spacing:0;margin-top:4px">—</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Charts -->
+  <section>
+    <h2>Distribution</h2>
+    <div id="charts-row">
+      <div class="chart-card">
+        <h2>By Symbol</h2>
+        <canvas id="chart-symbol"></canvas>
+      </div>
+      <div class="chart-card">
+        <h2>By Anomaly Type</h2>
+        <canvas id="chart-type"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live feed -->
+  <section>
+    <div id="live-header">
+      <h2>Live Feed</h2>
+      <span class="badge" id="live-count">0</span>
+    </div>
+    <div id="live-feed">
+      <div style="color:var(--text-muted);font-size:12px;padding:8px 0">
+        <span class="spinner"></span>Waiting for anomaly events…
+      </div>
+    </div>
+  </section>
+
+  <!-- Table -->
+  <section>
+    <h2>Recent Anomalies</h2>
+    <div id="filter-bar">
+      <input id="filter-symbol"    placeholder="Symbol (e.g. BTCUSDT)" />
+      <input id="filter-type"      placeholder="Type (e.g. VOLUME)" />
+      <input id="filter-min-score" type="number" placeholder="Min score" step="0.1" min="0" />
+      <button id="btn-apply">Apply</button>
+      <button id="btn-clear">Clear</button>
+    </div>
+    <div id="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Symbol</th>
+            <th>Event Time</th>
+            <th>Price (USD)</th>
+            <th>Volume</th>
+            <th>Anomaly Types</th>
+            <th>Score</th>
+            <th>Flags</th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr class="empty-row"><td colspan="8"><span class="spinner"></span>Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="pagination">
+      <button id="btn-prev" disabled>← Prev</button>
+      <span id="page-info">Page 1</span>
+      <button id="btn-next" disabled>Next →</button>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────
+const PAGE_SIZE      = 50;
+const MAX_LIVE_ITEMS = 100;
+const STATS_INTERVAL = 60_000; // ms
+
+// ── State ──────────────────────────────────────────────────────────────────
+let currentPage     = 0;
+let liveCount       = 0;
+let reconnectDelay  = 1000;
+let chartSymbol     = null;
+let chartType       = null;
+let filters = { symbol: '', type: '', minScore: null };
+
+// ── Chart.js defaults ──────────────────────────────────────────────────────
+Chart.defaults.color       = '#64748b';
+Chart.defaults.borderColor = '#2a3147';
+Chart.defaults.font.family = "'Inter','Segoe UI',system-ui,sans-serif";
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function fmtPrice(p) {
+  return p == null ? '—' : p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+}
+function fmtVolume(v) { return v == null ? '—' : v.toFixed(4); }
+function fmtTime(ts)  { return ts ? new Date(ts).toLocaleString() : '—'; }
+function fmtTimeShort(ts) { return ts ? new Date(ts).toLocaleTimeString() : '—'; }
+
+function scoreClass(s) {
+  if (s == null) return '';
+  if (s < 2)    return 'score-low';
+  if (s < 4)    return 'score-medium';
+  return 'score-high';
+}
+
+function typeTags(typeStr) {
+  if (!typeStr) return '';
+  return typeStr.split('|').map(t => {
+    const cls = t.includes('ZSCORE') ? 'zscore' : t.includes('IQR') ? 'iqr' : t.includes('VOLUME') ? 'volume' : '';
+    return `<span class="tag ${cls}">${t}</span>`;
+  }).join(' ');
+}
+
+function flagsText(row) {
+  const parts = [];
+  if (row.is_price_anomaly)  parts.push('PRICE');
+  if (row.is_iqr_anomaly)    parts.push('IQR');
+  if (row.is_volume_spike)   parts.push('VOL');
+  return parts.join(' · ') || '—';
+}
+
+// ── WebSocket status badge ─────────────────────────────────────────────────
+function setWsStatus(text, cls) {
+  const el = document.getElementById('ws-status');
+  el.textContent = text;
+  el.className   = cls;
+}
+
+// ── Stats & Charts ─────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const res = await fetch('/anomalies/stats');
+    if (!res.ok) return;
+    const data = await res.json();
+
+    document.getElementById('stat-total').textContent   = data.total_last_24h.toLocaleString();
+    document.getElementById('stat-symbols').textContent = Object.keys(data.by_symbol).length;
+
+    // Top type (aggregate token counts from pipe-separated keys)
+    const tokenCounts = {};
+    for (const [typeStr, count] of Object.entries(data.by_type)) {
+      for (const token of typeStr.split('|')) {
+        tokenCounts[token] = (tokenCounts[token] || 0) + count;
+      }
+    }
+    const topType = Object.entries(tokenCounts).sort((a, b) => b[1] - a[1])[0];
+    document.getElementById('stat-top-type').textContent = topType ? topType[0].replace('_', ' ') : '—';
+
+    updateChartSymbol(data.by_symbol);
+    updateChartType(tokenCounts);
+  } catch (_) {}
+}
+
+function updateChartSymbol(bySymbol) {
+  const sorted  = Object.entries(bySymbol).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const labels  = sorted.map(([k]) => k);
+  const values  = sorted.map(([, v]) => v);
+  const colors  = ['#3b82f6','#10b981','#8b5cf6','#f59e0b','#ef4444','#06b6d4','#f97316','#84cc16','#ec4899','#6366f1'];
+
+  if (chartSymbol) {
+    chartSymbol.data.labels           = labels;
+    chartSymbol.data.datasets[0].data = values;
+    chartSymbol.update();
+    return;
+  }
+  chartSymbol = new Chart(document.getElementById('chart-symbol'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Anomalies',
+        data: values,
+        backgroundColor: colors.slice(0, labels.length),
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: '#2a3147' }, ticks: { color: '#64748b' } },
+        y: { grid: { display: false },   ticks: { color: '#94a3b8', font: { weight: '600' } } },
+      }
+    }
+  });
+}
+
+function updateChartType(tokenCounts) {
+  const sorted = Object.entries(tokenCounts).sort((a, b) => b[1] - a[1]);
+  const labels = sorted.map(([k]) => k.replace('_', ' '));
+  const values = sorted.map(([, v]) => v);
+  const colors = ['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4'];
+
+  if (chartType) {
+    chartType.data.labels           = labels;
+    chartType.data.datasets[0].data = values;
+    chartType.update();
+    return;
+  }
+  chartType = new Chart(document.getElementById('chart-type'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: colors,
+        borderColor: '#161b26',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      responsive: true,
+      cutout: '65%',
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: { color: '#94a3b8', padding: 14, font: { size: 12 } }
+        }
+      }
+    }
+  });
+}
+
+// ── Table ──────────────────────────────────────────────────────────────────
+async function loadTable() {
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '<tr class="empty-row"><td colspan="8"><span class="spinner"></span>Loading…</td></tr>';
+
+  const params = new URLSearchParams({
+    limit:  PAGE_SIZE,
+    offset: currentPage * PAGE_SIZE,
+  });
+  if (filters.symbol)   params.set('symbol',        filters.symbol);
+  if (filters.type)     params.set('anomaly_type',  filters.type);
+  if (filters.minScore != null) params.set('min_score', filters.minScore);
+
+  try {
+    const res  = await fetch(`/anomalies/?${params}`);
+    if (!res.ok) { tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Error loading data.</td></tr>'; return; }
+    const rows = await res.json();
+
+    if (!rows.length) {
+      tbody.innerHTML = '<tr class="empty-row"><td colspan="8">No anomalies found for the current filters.</td></tr>';
+      updatePagination(false);
+      return;
+    }
+
+    tbody.innerHTML = rows.map(r => `
+      <tr>
+        <td>${r.id}</td>
+        <td class="sym">${r.symbol}</td>
+        <td>${fmtTime(r.event_time)}</td>
+        <td class="price">${fmtPrice(r.price)}</td>
+        <td>${fmtVolume(r.volume)}</td>
+        <td>${typeTags(r.anomaly_type)}</td>
+        <td class="score ${scoreClass(r.anomaly_score)}">${r.anomaly_score != null ? r.anomaly_score.toFixed(2) : '—'}</td>
+        <td class="flags">${flagsText(r)}</td>
+      </tr>`).join('');
+
+    updatePagination(rows.length === PAGE_SIZE);
+  } catch (_) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="8">Failed to fetch data.</td></tr>';
+  }
+}
+
+function updatePagination(hasMore) {
+  document.getElementById('btn-prev').disabled = currentPage === 0;
+  document.getElementById('btn-next').disabled = !hasMore;
+  document.getElementById('page-info').textContent = `Page ${currentPage + 1}`;
+}
+
+// ── Live feed ──────────────────────────────────────────────────────────────
+function prependLiveFeedItem(a) {
+  const feed = document.getElementById('live-feed');
+
+  // Remove placeholder if present
+  const placeholder = feed.querySelector('[data-placeholder]');
+  if (placeholder) placeholder.remove();
+
+  const div = document.createElement('div');
+  div.className = 'live-item';
+  div.innerHTML = `
+    <span class="li-symbol">${a.symbol}</span>
+    <span class="li-time">${fmtTimeShort(a.detected_at)}</span>
+    <span class="li-price">$${fmtPrice(a.price)}</span>
+    <span class="li-types">${typeTags(a.anomaly_type)}</span>
+    <span class="li-score ${scoreClass(a.anomaly_score)}">${a.anomaly_score != null ? a.anomaly_score.toFixed(2) : '—'}</span>
+  `;
+  feed.prepend(div);
+
+  // Cap DOM size
+  while (feed.children.length > MAX_LIVE_ITEMS) feed.lastElementChild.remove();
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+function initWebSocket() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws    = new WebSocket(`${proto}//${location.host}/ws/alerts`);
+
+  ws.onopen = () => {
+    setWsStatus('Connected', 'connected');
+    reconnectDelay = 1000;
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      // The broadcaster may send {type:'ping'} heartbeats — ignore them
+      if (!data.id) return;
+      prependLiveFeedItem(data);
+      liveCount++;
+      document.getElementById('live-count').textContent = liveCount;
+      document.getElementById('stat-last-seen').textContent = fmtTimeShort(data.detected_at);
+      // Refresh stats every 10 live events
+      if (liveCount % 10 === 0) loadStats();
+    } catch (_) {}
+  };
+
+  ws.onerror = () => setWsStatus('Error', 'disconnected');
+
+  ws.onclose = () => {
+    setWsStatus('Reconnecting…', 'reconnecting');
+    setTimeout(initWebSocket, reconnectDelay);
+    reconnectDelay = Math.min(reconnectDelay * 2, 30_000);
+  };
+}
+
+// ── Filter controls ────────────────────────────────────────────────────────
+document.getElementById('btn-apply').addEventListener('click', () => {
+  filters.symbol   = document.getElementById('filter-symbol').value.trim().toUpperCase();
+  filters.type     = document.getElementById('filter-type').value.trim().toUpperCase();
+  const ms         = parseFloat(document.getElementById('filter-min-score').value);
+  filters.minScore = isNaN(ms) ? null : ms;
+  currentPage      = 0;
+  loadTable();
+});
+
+document.getElementById('btn-clear').addEventListener('click', () => {
+  document.getElementById('filter-symbol').value    = '';
+  document.getElementById('filter-type').value      = '';
+  document.getElementById('filter-min-score').value = '';
+  filters = { symbol: '', type: '', minScore: null };
+  currentPage = 0;
+  loadTable();
+});
+
+document.getElementById('btn-prev').addEventListener('click', () => {
+  if (currentPage > 0) { currentPage--; loadTable(); }
+});
+
+document.getElementById('btn-next').addEventListener('click', () => {
+  currentPage++;
+  loadTable();
+});
+
+// Allow Enter key in filter inputs to apply
+['filter-symbol','filter-type','filter-min-score'].forEach(id => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('btn-apply').click();
+  });
+});
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(function init() {
+  // Mark live feed placeholder so we can remove it on first event
+  const placeholder = document.querySelector('#live-feed > div');
+  if (placeholder) placeholder.setAttribute('data-placeholder', '1');
+
+  loadStats();
+  loadTable();
+  initWebSocket();
+  setInterval(loadStats, STATS_INTERVAL);
+})();
+</script>
+</body>
+</html>

@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     db_max_overflow: int = 20
     ws_heartbeat_interval: int = 30
     anomaly_page_size: int = 100
+    cors_origins: list[str] = []
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
