@@ -7,10 +7,15 @@ Lifespan:
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
+from .config import settings
 from .db import AsyncSessionLocal, engine
 from .routers import anomalies, health, websocket
 from .services.alert_broadcaster import broadcaster
@@ -41,6 +46,22 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
+
+_static_dir = os.path.join(os.path.dirname(__file__), "static")
+app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+
+
+@app.get("/", include_in_schema=False)
+async def serve_dashboard():
+    return FileResponse(os.path.join(_static_dir, "index.html"))
+
 
 app.include_router(health.router)
 app.include_router(anomalies.router)
